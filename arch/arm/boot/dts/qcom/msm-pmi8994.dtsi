@@ -206,7 +206,11 @@
 #ifdef CONFIG_QPNP_SMBCHARGER_HW
 			qcom,fastchg-current-ma = <2000>;
 #else
+#ifdef CONFIG_PRODUCT_Z2_X
+			qcom,fastchg-current-ma = <2000>;
+#else
 			qcom,fastchg-current-ma = <2400>;
+#endif
 #endif
 			qcom,float-voltage-mv = <4400>;
 			qcom,resume-delta-mv = <200>;
@@ -333,7 +337,11 @@
 			status = "okay";
 			qcom,bcl-lm-threshold-ma = <127>;
 			qcom,bcl-mh-threshold-ma = <405>;
+#ifdef CONFIG_PRODUCT_Z2_X
+			qcom,fg-iterm-ma = <150>;
+#else
 			qcom,fg-iterm-ma = <125>;
+#endif
 			qcom,fg-chg-iterm-ma = <100>;
 			qcom,cycle-counter-en;
 			qcom,capacity-learning-on;
@@ -706,7 +714,7 @@
 						"flash0_trigger";
 				qcom,id = <0>;
 				qcom,duration = <1280>;
-#if defined(CONFIG_PRODUCT_Z2_PLUS)
+#if defined(CONFIG_PRODUCT_Z2_PLUS)|| defined(CONFIG_PRODUCT_Z2_X)
 				qcom,current = <800>;
 #else
 				qcom,current = <400>;
@@ -731,7 +739,11 @@
 				qcom,default-led-trigger =
 						"torch0_trigger";
 				qcom,id = <0>;
+#ifdef CONFIG_PRODUCT_Z2_ROW
 				qcom,current = <200>;
+#else
+				qcom,current = <100>;
+#endif
 				qcom,max-current = <200>;
 			};
 
@@ -741,7 +753,11 @@
 				qcom,default-led-trigger =
 						"torch1_trigger";
 				qcom,id = <1>;
+#ifdef CONFIG_PRODUCT_Z2_ROW
 				qcom,current = <40>;
+#else
+				qcom,current = <20>;
+#endif
 				qcom,max-current = <200>;
 			};
 

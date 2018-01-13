@@ -702,6 +702,23 @@
             };
         };
 
+#ifdef CONFIG_PRODUCT_Z2_ROW
+        /*add for hall sensor*/
+        hall_mux {
+            hall_default: default {
+                mux {
+                    pins = "gpio124";
+                    function = "gpio";
+                };
+                config {
+                    pins = "gpio124";
+                    drive-strength = <4>;
+                    bias-pull-up;
+                };
+            };
+        };
+#endif
+
 		ts_mux {
 			ts_active: ts_active {
 				mux {
@@ -813,6 +830,8 @@
 				pins = "gpio0", "gpio33", "gpio123";
 #elif defined CONFIG_PRODUCT_Z2_ROW
 				pins = "gpio0", "gpio33", "gpio79", "gpio81";
+#elif defined CONFIG_PRODUCT_Z2_X
+				pins = "gpio0", "gpio33", "gpio82", "gpio121";
 #else
 				pins = "gpio0", "gpio33";
 #endif
@@ -823,6 +842,8 @@
 				pins = "gpio0", "gpio33", "gpio123";
 #elif defined CONFIG_PRODUCT_Z2_ROW
 				pins = "gpio0", "gpio33", "gpio79", "gpio81";
+#elif defined CONFIG_PRODUCT_Z2_X
+				pins = "gpio0", "gpio33", "gpio82", "gpio121";
 #else
 				pins = "gpio0", "gpio33";
 #endif
@@ -837,6 +858,8 @@
 				pins = "gpio0", "gpio33", "gpio123";
 #elif defined CONFIG_PRODUCT_Z2_ROW
 				pins = "gpio0", "gpio33", "gpio79", "gpio81";
+#elif defined CONFIG_PRODUCT_Z2_X
+				pins = "gpio0", "gpio33", "gpio82", "gpio121";
 #else
 				pins = "gpio0", "gpio33";
 #endif
@@ -845,8 +868,10 @@
 			config {
 #if defined CONFIG_PRODUCT_Z2_PLUS
 				pins = "gpio0", "gpio33", "gpio123";
-#elif defined CONFIG_PRODUCT_Z2_ROW
+#elif defined CONFIG_PRODUCT_Z2_ROW || defined CONFIG_PRODUCT_Z2_X
 				pins = "gpio0", "gpio33", "gpio79", "gpio81";
+#elif defined CONFIG_PRODUCT_Z2_X
+				pins = "gpio0", "gpio33", "gpio82", "gpio121";
 #else
 				pins = "gpio0", "gpio33";
 #endif
@@ -907,7 +932,7 @@
 			};
 		};
 
-#if defined CONFIG_PRODUCT_Z2_ROW
+#if defined CONFIG_PRODUCT_Z2_ROW || defined CONFIG_PRODUCT_Z2_X
 		i2c_5 {
                         i2c_5_active: i2c_5_active {
 				mux {
