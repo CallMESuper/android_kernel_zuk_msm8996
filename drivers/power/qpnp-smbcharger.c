@@ -52,19 +52,39 @@
 #define SUPPORT_SCREEN_ON_FCC_OP
 #define SUPPORT_CALL_ON_FCC_OP
 #define SUPPORT_TEHRMAL_MITIGATION_WITH_FCC
+#define SUPPORT_THERMAL_CAMERA
+//#define SUPPORT_THERMAL_CAMERA_DEBUG
 #define SUPPORT_LENUK_CUSTOM_BATTERY_MONITOR
 #define SUPPORT_CALL_POWER_OP
 #define SUPPORT_CCLOGIC_EVENT_TYPE
 #ifdef CONFIG_PRODUCT_Z2_PLUS
 #define SUPPORT_ONLY_5V_CHARGER
 #endif
-#if defined CONFIG_PRODUCT_Z2_PLUS
+#ifdef CONFIG_PRODUCT_Z2_X
+//#define SUPPORT_LENUK_STEP_CHARGE
+#define LENUK_STEP_CHARGE_VOLTAGE		4020000
+#define LENUK_STEP_CHARGE_FCC			1900
+#endif
+#if defined CONFIG_PRODUCT_Z2_PLUS || defined CONFIG_PRODUCT_Z2_X
 #define SUPPORT_LENUK_WIRE_CHARGER
 #endif
 #define SUPPORT_LENUK_BOOTUP_ICL
 //#define SUPPORT_QPNP_NOISE_LOG
 
 #define SUPPORT_FORCE_RERUN_APSD
+
+#ifdef SUPPORT_THERMAL_CAMERA
+#define TEMP_THRES_LOW_FOR_CAMERA_LIGHT					425
+#define TEMP_THRES_HIGH_FOR_CAMERA_LIGHT				440
+#define TEMP_THRES_LOW_FOR_CAMERA_CHARGE_DISABLE			425
+#define TEMP_THRES_HIGH_FOR_CAMERA_CHARGE_DISABLE			440
+int g_camera_state = 0;
+int g_batt_is_hot = 0;
+int g_camera_charge_enable = 1;
+#endif
+#ifdef SUPPORT_THERMAL_CAMERA_DEBUG
+int g_test_temp = 260;
+#endif
 
 #ifdef SUPPORT_CALL_POWER_OP
 extern int g_call_status;
@@ -368,6 +388,12 @@ struct smbchg_chip {
 	int				screen_on;
 	struct notifier_block 		fb_notif;
 #endif
+#ifdef SUPPORT_THERMAL_CAMERA
+	int 				temp_thres_low_for_camera_light;
+	int 				temp_thres_high_for_camera_light;
+	int				temp_thres_low_for_camera_charge_disable;
+	int				temp_thres_high_for_camera_charge_disable;
+#endif
 #ifdef SUPPORT_CCLOGIC_EVENT_TYPE
 	struct notifier_block 	cclogic_notif;
 	int				cclogic_attached;
@@ -446,6 +472,9 @@ enum fcc_voters {
 #ifdef SUPPORT_CALL_ON_FCC_OP
 	CALL_ON_FCC_VOTER,
 #endif
+#ifdef CONFIG_PRODUCT_Z2_X
+	MAX_CURRENT_FCC_VOTER,
+#endif
 #ifdef SUPPORT_TEHRMAL_MITIGATION_WITH_FCC
 	THERMAL_MITIGATION_FCC_VOTER,
 #endif
@@ -522,6 +551,9 @@ enum battchg_enable_voters {
 	BATTCHG_UNKNOWN_BATTERY_EN_VOTER,
 #ifdef SUPPORT_TEHRMAL_MITIGATION_WITH_FCC
 	BATTCHG_THERMAL_MITIGATION_EN_VOTER,
+#endif
+#ifdef SUPPORT_THERMAL_CAMERA
+	BATTCHG_THERMAL_CAMERA_EN_VOTER,
 #endif
 	NUM_BATTCHG_EN_VOTERS,
 };
@@ -3851,6 +3883,10 @@ static void smbchg_jeita_temp_monitor_work(struct work_struct *work)
 				struct smbchg_chip,
 				jeita_temp_monitor_work.work);
 
+#ifdef CONFIG_PRODUCT_Z2_X
+#define FCC_MA_SWITCH_THRESHOLD 4000000
+	int battery_uv_now = get_prop_batt_voltage_now(chip);
+#endif
 	int temp = get_prop_batt_temp(chip), rc;
 #ifdef SUPPORT_QPNP_USBIN_MONITOR
 	int fcc_ma = get_effective_result_locked(chip->fcc_votable);
@@ -3875,6 +3911,16 @@ static void smbchg_jeita_temp_monitor_work(struct work_struct *work)
 	smbchg_get_usbin_uv(chip);
 #endif
 
+#ifdef CONFIG_PRODUCT_Z2_X
+	if(battery_uv_now < FCC_MA_SWITCH_THRESHOLD){
+		vote(chip->fcc_votable, BATT_TYPE_FCC_VOTER, false,
+			0);
+		vote(chip->fcc_votable, MAX_CURRENT_FCC_VOTER, true,
+			2400);
+	}else
+		vote(chip->fcc_votable, BATT_TYPE_FCC_VOTER, true,
+			2000);
+#endif
 	if (is_usb_present(chip)
 			&& (POWER_SUPPLY_STATUS_FULL == get_prop_batt_status(chip))
 			&& (get_prop_batt_capacity(chip) != BATT_FULL_CAPACITY)) {
@@ -3905,6 +3951,56 @@ static void smbchg_jeita_temp_monitor_work(struct work_struct *work)
 		}
 		pr_smb(PR_STATUS, "set vfloat_comp to %d\n", chip->float_voltage_comp);
 	}
+
+#ifdef SUPPORT_THERMAL_CAMERA
+#ifdef SUPPORT_THERMAL_CAMERA_DEBUG
+	temp = g_test_temp;
+#endif
+	pr_smb(PR_STATUS, "g_camera state %d, charging %d, temp %d\n", g_camera_state, g_camera_charge_enable, temp);
+	if (g_camera_state) {
+		if ((temp > chip->temp_thres_high_for_camera_charge_disable) && g_camera_charge_enable) {
+			rc = vote(chip->battchg_suspend_votable,
+				BATTCHG_THERMAL_CAMERA_EN_VOTER, true, 0);
+			if (rc < 0)
+				dev_err(chip->dev,
+					"Couldn't vote battchg thermal camera (charging disable) %d\n", rc);
+			else {
+				dev_err(chip->dev,
+						"Vote battchg thermal camera (charging disable) %d\n", rc);
+				g_camera_charge_enable = 0;
+			}
+		} else if ((temp < chip->temp_thres_low_for_camera_charge_disable) && !g_camera_charge_enable) {
+			rc = vote(chip->battchg_suspend_votable,
+				BATTCHG_THERMAL_CAMERA_EN_VOTER, false, 0);
+			if (rc < 0)
+				dev_err(chip->dev,
+					"Couldn't vote battchg thermal camera (charging enable) %d\n", rc);
+			else{
+				dev_err(chip->dev,
+					"Vote battchg thermal camera (charging enable) %d\n", rc);
+				g_camera_charge_enable = 1;
+			}
+		}
+	} else {
+		if (!g_camera_charge_enable)
+			rc = vote(chip->battchg_suspend_votable,
+				BATTCHG_THERMAL_CAMERA_EN_VOTER, false, 0);
+			if (rc < 0)
+				dev_err(chip->dev,
+					"Couldn't vote battchg thermal camera (charging enable) %d\n", rc);
+			else{
+				dev_err(chip->dev,
+					"Vote battchg thermal camera (charging enable) %d\n", rc);
+				g_camera_charge_enable = 1;
+			}
+	}
+
+	if (temp > chip->temp_thres_high_for_camera_light)
+		g_batt_is_hot = 1;
+	else if (temp < chip->temp_thres_low_for_camera_light)
+		g_batt_is_hot = 0;
+	pr_smb(PR_STATUS, "g_camera state %d, charging %d, hot %d\n", g_camera_state, g_camera_charge_enable, g_batt_is_hot);
+#endif
 
 	schedule_delayed_work(&chip->jeita_temp_monitor_work,
 					msecs_to_jiffies(JEITA_RECHARGE_MONITOR_MS));
@@ -4786,7 +4882,9 @@ static int smbchg_external_otg_regulator_disable(struct regulator_dev *rdev)
 	rc = vote(chip->hvdcp_enable_votable, HVDCP_OTG_VOTER, false, 1);
 
 #ifdef SUPPORT_ONLY_5V_CHARGER
-	rc = vote(chip->hvdcp_enable_votable, HVDCP_OTG_VOTER, true, 0);
+	rc = smbchg_sec_masked_write(chip,
+				chip->usb_chgpth_base + CHGPTH_CFG,
+				HVDCP_EN_BIT, 0);
 	if (rc < 0) {
 		dev_err(chip->dev, "Couldn't disable HVDCP rc=%d\n", rc);
 		return rc;
@@ -4796,7 +4894,9 @@ static int smbchg_external_otg_regulator_disable(struct regulator_dev *rdev)
 				chip->usb_chgpth_base + USBIN_CHGR_CFG,
 				0xFF, USBIN_ADAPTER_5V);
 #else
-	rc = vote(chip->hvdcp_enable_votable, HVDCP_OTG_VOTER, false, 1);
+	rc = smbchg_sec_masked_write(chip,
+				chip->usb_chgpth_base + CHGPTH_CFG,
+				HVDCP_EN_BIT, HVDCP_EN_BIT);
 	if (rc < 0) {
 		dev_err(chip->dev, "Couldn't enable HVDCP rc=%d\n", rc);
 		return rc;
@@ -6284,7 +6384,9 @@ static int smbchg_unprepare_for_pulsing(struct smbchg_chip *chip)
 #ifdef SUPPORT_ONLY_5V_CHARGER
 	/* disable HVDCP */
 	pr_smb(PR_MISC, "Disable HVDCP\n");
-	rc = vote(chip->hvdcp_enable_votable, HVDCP_PULSING_VOTER, true, 0);
+	rc = smbchg_sec_masked_write(chip,
+				chip->usb_chgpth_base + CHGPTH_CFG,
+				HVDCP_EN_BIT, 0);
 	if (rc < 0) {
 		pr_err("Couldn't disable HVDCP rc=%d\n", rc);
 		return rc;
@@ -9219,7 +9321,7 @@ static int cclogic_notifier_callback(struct notifier_block *self, unsigned long 
 #endif
 
 #ifdef SUPPORT_SCREEN_ON_FCC_OP
-#define SCREEN_ON_MAX_FCC_MA			800
+#define SCREEN_ON_MAX_FCC_MA			1420
 static int reset_max_fcc_ma(struct smbchg_chip *chip, int ma, bool state)
 {
 	int rc = 0;
@@ -9533,6 +9635,12 @@ static int smbchg_probe(struct spmi_device *spmi)
 #ifdef SUPPORT_FORCE_RERUN_APSD
 	chip->apsd_rerun_done = 0;
 	chip->apsd_rerun_enable = 1;
+#endif
+#ifdef SUPPORT_THERMAL_CAMERA
+	chip->temp_thres_low_for_camera_light = TEMP_THRES_LOW_FOR_CAMERA_LIGHT;
+	chip->temp_thres_high_for_camera_light = TEMP_THRES_HIGH_FOR_CAMERA_LIGHT;
+	chip->temp_thres_low_for_camera_charge_disable = TEMP_THRES_LOW_FOR_CAMERA_CHARGE_DISABLE;
+	chip->temp_thres_high_for_camera_charge_disable = TEMP_THRES_HIGH_FOR_CAMERA_CHARGE_DISABLE;
 #endif
 #ifdef SUPPORT_LENUK_STEP_CHARGE
 	INIT_DELAYED_WORK(&chip->step_charge_monitor_work, smbchg_step_charge_monitor_work);
