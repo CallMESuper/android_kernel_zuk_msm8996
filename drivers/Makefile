@@ -172,3 +172,4 @@ obj-$(CONFIG_BIF)		+= bif/
 obj-$(CONFIG_SENSORS_SSC)	+= sensors/
 
 obj-$(CONFIG_FPC1020_REE) += fingerprint/
+obj-$(CONFIG_FINGERPRINT_GOODIX) += fingerprint/
