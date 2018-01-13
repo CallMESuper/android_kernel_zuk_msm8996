@@ -1143,6 +1143,9 @@ static int mdss_dsi_panel_off(struct mdss_panel_data *pdata)
 		if (ctrl->ndx != DSI_CTRL_LEFT)
 			goto end;
 	}
+#ifdef CONFIG_PRODUCT_Z2_X
+	gpio_set_value((ctrl->bklt_en_gpio), 0);
+#endif
 
 	if (ctrl->off_cmds.cmd_cnt)
 		mdss_dsi_panel_cmds_send(ctrl, &ctrl->off_cmds, CMD_REQ_COMMIT);
@@ -2597,6 +2600,8 @@ static int  mdss_dsi_panel_config_res_properties(struct device_node *np,
 	int rc = 0;
 #ifdef CONFIG_PRODUCT_Z2_PLUS
 		lcd_data = lcd_otm1901a_data;
+#elif defined CONFIG_PRODUCT_Z2_X
+		lcd_data = lcd_ft8716_data;
 #else
 		lcd_data = lcd_ams520_data;
 #endif
@@ -2780,8 +2785,10 @@ static int mdss_panel_parse_dt(struct device_node *np,
 		else if (!strcmp(data, "vflip"))
 			pinfo->panel_orientation = MDP_FLIP_UD;
 	}
+#ifndef CONFIG_PRODUCT_Z2_X
 	if(is_testmode)
 		pinfo->panel_orientation = MDP_ROT_180;
+#endif
 
 	rc = of_property_read_u32(np, "qcom,mdss-brightness-max-level", &tmp);
 	pinfo->brightness_max = (!rc ? tmp : MDSS_MAX_BL_BRIGHTNESS);
